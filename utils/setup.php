@@ -14,6 +14,8 @@ $aCMDOptions
 
    array('osm-file', '', 0, 1, 1, 1, 'realpath', 'File to import'),
    array('threads', '', 0, 1, 1, 1, 'int', 'Number of threads (where possible)'),
+   # (long-opt, short-opt, ?, ?, num-arguments, num-arguments, type, help)
+   array('module-path', '', 0, 1, 1, 1, 'realdir', 'Postgres C module path'),
 
    array('all', '', 0, 1, 0, 0, 'bool', 'Do the complete process'),
 
@@ -77,6 +79,12 @@ if (isset($aCMDResult['osm2pgsql-cache'])) {
     $iCacheMemory = $aCMDResult['osm2pgsql-cache'];
 } else {
     $iCacheMemory = getCacheMemoryMB();
+}
+
+$modulePath = CONST_InstallPath . '/module';
+if (isset($aCMDResult['module-path'])) {
+   $modulePath = $aCMDResult['module-path'];
+   echo "module path: " . $modulePath . "\n";
 }
 
 $aDSNInfo = DB::parseDSN(CONST_Database_DSN);
@@ -159,8 +167,8 @@ if ($aCMDResult['setup-db'] || $aCMDResult['all']) {
     // is only defined in the subsequently called create_tables.
     // Create dummies here that will be overwritten by the proper
     // versions in create-tables.
-    pgsqlRunScript('CREATE TABLE place_boundingbox ()');
-    pgsqlRunScript('create type wikipedia_article_match as ()');
+    pgsqlRunScript('CREATE TABLE IF NOT EXISTS place_boundingbox ()');
+    pgsqlRunScript('CREATE TYPE wikipedia_article_match AS ()', false);
 }
 
 if ($aCMDResult['import-data'] || $aCMDResult['all']) {
@@ -188,6 +196,9 @@ if ($aCMDResult['import-data'] || $aCMDResult['all']) {
     $osm2pgsql .= ' -lsc -O gazetteer --hstore --number-processes 1';
     $osm2pgsql .= ' -C '.$iCacheMemory;
     $osm2pgsql .= ' -P '.$aDSNInfo['port'];
+    if (isset($aDSNInfo['username']) && $aDSNInfo['username']) {
+        $osm2pgsql .= ' -U ' . $aDSNInfo['username'];
+    }
     $osm2pgsql .= ' -d '.$aDSNInfo['database'].' '.$aCMDResult['osm-file'];
     passthruCheckReturn($osm2pgsql);
 
@@ -373,9 +384,9 @@ if ($aCMDResult['load-data'] || $aCMDResult['all']) {
     for ($i = 0; $i < $iLoadThreads; $i++) {
         $aDBInstances[$i] =& getDB(true);
         $sSQL = "INSERT INTO placex ($sColumns) SELECT $sColumns FROM place WHERE osm_id % $iLoadThreads = $i";
-        $sSQL .= " and not (class='place' and type='houses' and osm_type='W'";
-        $sSQL .= "          and ST_GeometryType(geometry) = 'ST_LineString')";
-        $sSQL .= " and ST_IsValid(geometry)";
+        $sSQL .= " AND NOT (class='place' AND type='houses' AND osm_type='W'";
+        $sSQL .= "          AND ST_GeometryType(geometry) = 'ST_LineString')";
+        $sSQL .= " AND ST_IsValid(geometry)";
         if ($aCMDResult['verbose']) echo "$sSQL\n";
         if (!pg_send_query($aDBInstances[$i]->connection, $sSQL)) {
             fail(pg_last_error($aDBInstances[$i]->connection));
@@ -383,25 +394,34 @@ if ($aCMDResult['load-data'] || $aCMDResult['all']) {
     }
     // last thread for interpolation lines
     $aDBInstances[$iLoadThreads] =& getDB(true);
-    $sSQL = 'insert into location_property_osmline';
+    $sSQL = 'INSERT INTO location_property_osmline';
     $sSQL .= ' (osm_id, address, linegeo)';
-    $sSQL .= ' SELECT osm_id, address, geometry from place where ';
-    $sSQL .= "class='place' and type='houses' and osm_type='W' and ST_GeometryType(geometry) = 'ST_LineString'";
+    $sSQL .= ' SELECT osm_id, address, geometry FROM place WHERE ';
+    $sSQL .= "class='place' AND type='houses' AND osm_type='W' AND ST_GeometryType(geometry) = 'ST_LineString'";
     if ($aCMDResult['verbose']) echo "$sSQL\n";
     if (!pg_send_query($aDBInstances[$iLoadThreads]->connection, $sSQL)) {
         fail(pg_last_error($aDBInstances[$iLoadThreads]->connection));
     }
 
-    $bAnyBusy = true;
-    while ($bAnyBusy) {
-        $bAnyBusy = false;
-        for ($i = 0; $i <= $iLoadThreads; $i++) {
-            if (pg_connection_busy($aDBInstances[$i]->connection)) $bAnyBusy = true;
-        }
-        sleep(1);
-        echo '.';
+    $failed = false;
+    for ($i = 0; $i <= $iLoadThreads; $i++) {
+       while (($pgresult = pg_get_result($aDBInstances[$i]->connection)) !== false) {
+          $resultStatus = pg_result_status($pgresult);
+          // PGSQL_EMPTY_QUERY, PGSQL_COMMAND_OK, PGSQL_TUPLES_OK,
+          // PGSQL_COPY_OUT, PGSQL_COPY_IN, PGSQL_BAD_RESPONSE,
+          // PGSQL_NONFATAL_ERROR and PGSQL_FATAL_ERROR
+          echo "Query result " . $i . " is: " . $resultStatus . "\n";
+          if ($resultStatus != PGSQL_COMMAND_OK || $resultStatus != PGSQL_TUPLES_OK) {
+             $resultError = pg_result_error($pgresult);
+             echo "-- error text " . $i . ": " . $resultError . "\n";
+             $failed = true;
+          }
+       }
     }
-    echo "\n";
+    if ($failed) {
+       fail("SQL errors loading placex and/or location_property_osmline tables");
+    }
+
     echo "Reanalysing database...\n";
     pgsqlRunScript('ANALYSE');
 
@@ -409,7 +429,8 @@ if ($aCMDResult['load-data'] || $aCMDResult['all']) {
     pg_query($oDB->connection, 'TRUNCATE import_status');
     if ($sDatabaseDate === false) {
         echo "WARNING: could not determine database date.\n";
-    } else {
+    }
+    else {
         $sSQL = "INSERT INTO import_status (lastimportdate) VALUES('".$sDatabaseDate."')";
         pg_query($oDB->connection, $sSQL);
         echo "Latest data imported from $sDatabaseDate.\n";
@@ -494,21 +515,21 @@ if ($aCMDResult['calculate-postcodes'] || $aCMDResult['all']) {
     $bDidSomething = true;
     $oDB =& getDB();
     if (!pg_query($oDB->connection, 'DELETE from placex where osm_type=\'P\'')) fail(pg_last_error($oDB->connection));
-    $sSQL = "insert into placex (osm_type,osm_id,class,type,address,country_code,geometry) ";
-    $sSQL .= "select 'P',nextval('seq_postcodes'),'place','postcode',";
+    $sSQL = "INSERT INTO placex (osm_type,osm_id,class,type,address,country_code,geometry) ";
+    $sSQL .= "SELECT 'P',nextval('seq_postcodes'),'place','postcode',";
     $sSQL .= "hstore('postcode', pc),country_code,";
-    $sSQL .= "ST_SetSRID(ST_Point(x,y),4326) as geometry from (select country_code,";
-    $sSQL .= "address->'postcode' as pc,";
-    $sSQL .= "avg(st_x(st_centroid(geometry))) as x,avg(st_y(st_centroid(geometry))) as y ";
-    $sSQL .= "from placex where address ? 'postcode' group by country_code,pc) as x ";
-    $sSQL .= "where ST_Point(x,y) is not null";
+    $sSQL .= "ST_SetSRID(ST_Point(x,y),4326) AS geometry FROM (select country_code,";
+    $sSQL .= "address->'postcode' AS pc,";
+    $sSQL .= "avg(st_x(st_centroid(geometry))) AS x,avg(st_y(st_centroid(geometry))) AS y ";
+    $sSQL .= "FROM placex WHERE address ? 'postcode' GROUP BY country_code,pc) AS x ";
+    $sSQL .= "WHERE ST_Point(x,y) IS NOT NULL";
     if (!pg_query($oDB->connection, $sSQL)) fail(pg_last_error($oDB->connection));
 
     if (CONST_Use_Extra_US_Postcodes) {
-        $sSQL = "insert into placex (osm_type,osm_id,class,type,address,country_code,geometry) ";
-        $sSQL .= "select 'P',nextval('seq_postcodes'),'place','postcode',";
+        $sSQL = "INSERT INTO placex (osm_type,osm_id,class,type,address,country_code,geometry) ";
+        $sSQL .= "SELECT 'P',nextval('seq_postcodes'),'place','postcode',";
         $sSQL .= "hstore('postcode', postcode),'us',";
-        $sSQL .= "ST_SetSRID(ST_Point(x,y),4326) as geometry from us_postcode";
+        $sSQL .= "ST_SetSRID(ST_Point(x,y),4326) AS geometry FROM us_postcode";
         if (!pg_query($oDB->connection, $sSQL)) fail(pg_last_error($oDB->connection));
     }
 }
@@ -522,11 +543,31 @@ if ($aCMDResult['index'] || $aCMDResult['all']) {
     $bDidSomething = true;
     $sOutputFile = '';
     $sBaseCmd = CONST_InstallPath.'/nominatim/nominatim -i -d '.$aDSNInfo['database'].' -P '.$aDSNInfo['port'].' -t '.$iInstances.$sOutputFile;
-    passthruCheckReturn($sBaseCmd.' -R 4');
+    if (isset($aDSNInfo['hostspec']) && $aDSNInfo['hostspec']) {
+        $sBaseCmd .= ' -H ' . $aDSNInfo['hostspec'];
+    }
+    if (isset($aDSNInfo['username']) && $aDSNInfo['username']) {
+        $sBaseCmd .= ' -U ' . $aDSNInfo['username'];
+    }
+    $procenv = NULL;
+    if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), getenv());
+    }
+
+    $status = runWithEnv($sBaseCmd.' -R 4', $procenv);
+    if ($status != 0) {
+        fail("error status " . $status . " running nominatim!");
+    }
     if (!$aCMDResult['index-noanalyse']) pgsqlRunScript('ANALYSE');
-    passthruCheckReturn($sBaseCmd.' -r 5 -R 25');
+    $status = runWithEnv($sBaseCmd.' -r 5 -R 25', $procenv);
+    if ($status != 0) {
+        fail("error status " . $status . " running nominatim!");
+    }
     if (!$aCMDResult['index-noanalyse']) pgsqlRunScript('ANALYSE');
-    passthruCheckReturn($sBaseCmd.' -r 26');
+    $status = runWithEnv($sBaseCmd.' -r 26', $procenv);
+    if ($status != 0) {
+        fail("error status " . $status . " running nominatim!");
+    }
 }
 
 if ($aCMDResult['create-search-indices'] || $aCMDResult['all']) {
@@ -648,6 +689,16 @@ function pgsqlRunScriptFile($sFilename)
     $aDSNInfo = DB::parseDSN(CONST_Database_DSN);
     if (!isset($aDSNInfo['port']) || !$aDSNInfo['port']) $aDSNInfo['port'] = 5432;
     $sCMD = 'psql -p '.$aDSNInfo['port'].' -d '.$aDSNInfo['database'];
+    if (isset($aDSNInfo['hostspec']) && $aDSNInfo['hostspec']) {
+        $sCMD .= ' -h ' . $aDSNInfo['hostspec'];
+    }
+    if (isset($aDSNInfo['username']) && $aDSNInfo['username']) {
+        $sCMD .= ' -U ' . $aDSNInfo['username'];
+    }
+    $procenv = NULL;
+    if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), getenv());
+    }
 
     $ahGzipPipes = null;
     if (preg_match('/\\.gz$/', $sFilename)) {
@@ -671,7 +722,7 @@ function pgsqlRunScriptFile($sFilename)
                      2 => array('file', '/dev/null', 'a')
                     );
     $ahPipes = null;
-    $hProcess = proc_open($sCMD, $aDescriptors, $ahPipes);
+    $hProcess = proc_open($sCMD, $aDescriptors, $ahPipes, NULL, $procenv);
     if (!is_resource($hProcess)) fail('unable to start pgsql');
 
 
@@ -698,6 +749,16 @@ function pgsqlRunScript($sScript, $bfatal = true)
     $aDSNInfo = DB::parseDSN(CONST_Database_DSN);
     if (!isset($aDSNInfo['port']) || !$aDSNInfo['port']) $aDSNInfo['port'] = 5432;
     $sCMD = 'psql -p '.$aDSNInfo['port'].' -d '.$aDSNInfo['database'];
+    if (isset($aDSNInfo['hostspec']) && $aDSNInfo['hostspec']) {
+        $sCMD .= ' -h ' . $aDSNInfo['hostspec'];
+    }
+    if (isset($aDSNInfo['username']) && $aDSNInfo['username']) {
+        $sCMD .= ' -U ' . $aDSNInfo['username'];
+    }
+    $procenv = NULL;
+    if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), getenv());
+    }
     if ($bfatal && !$aCMDResult['ignore-errors'])
         $sCMD .= ' -v ON_ERROR_STOP=1';
     $aDescriptors = array(
@@ -706,7 +767,7 @@ function pgsqlRunScript($sScript, $bfatal = true)
                      2 => STDERR
                     );
     $ahPipes = null;
-    $hProcess = @proc_open($sCMD, $aDescriptors, $ahPipes);
+    $hProcess = @proc_open($sCMD, $aDescriptors, $ahPipes, NULL, $procenv);
     if (!is_resource($hProcess)) fail('unable to start pgsql');
 
     while (strlen($sScript)) {
@@ -803,6 +864,30 @@ function passthruCheckReturn($cmd)
     if ($result != 0) fail('Error executing external command: '.$cmd);
 }
 
+function runWithEnv($cmd, $env)
+{
+   $fds = array(0 => array('pipe', 'r'),
+                1 => array('pipe', 'w'),
+                2 => array('pipe', 'w'));
+   $pipes = NULL;
+   $proc = @proc_open($cmd, $fds, $pipes, NULL, $env);
+   if (!is_resource($proc)) fail('unable to run command:' . $cmd);
+
+   fclose($pipes[0]); // no stdin
+   while (!feof($pipes[1])) {
+      echo fread($pipes[1], 4096);
+   }
+   while (!feof($pipes[2])) {
+      echo fread($pipes[2], 4096);
+   }
+
+   fclose($pipes[1]);
+   fclose($pipes[2]);
+
+   $stat = proc_close($proc);
+   return $stat;
+}
+
 function replace_tablespace($sTemplate, $sTablespace, $sSql)
 {
     if ($sTablespace) {
@@ -816,8 +901,9 @@ function replace_tablespace($sTemplate, $sTablespace, $sSql)
 
 function create_sql_functions($aCMDResult)
 {
+    global $modulePath;
     $sTemplate = file_get_contents(CONST_BasePath.'/sql/functions.sql');
-    $sTemplate = str_replace('{modulepath}', CONST_InstallPath.'/module', $sTemplate);
+    $sTemplate = str_replace('{modulepath}', $modulePath, $sTemplate);
     if ($aCMDResult['enable-diff-updates']) {
         $sTemplate = str_replace('RETURN NEW; -- %DIFFUPDATES%', '--', $sTemplate);
     }
