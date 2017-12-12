@@ -193,6 +193,9 @@ if ($aCMDResult['import-data'] || $aCMDResult['all']) {
     if (isset($aDSNInfo['username']) && $aDSNInfo['username']) {
         $osm2pgsql .= ' -U ' . $aDSNInfo['username'];
     }
+    if (isset($aDSNInfo['hostspec']) && $aDSNInfo['hostspec']) {
+        $osm2pgsql .= ' -H ' . $aDSNInfo['hostspec'];
+    }
     $osm2pgsql .= ' -d '.$aDSNInfo['database'].' '.$aCMDResult['osm-file'];
     passthruCheckReturn($osm2pgsql);
 
