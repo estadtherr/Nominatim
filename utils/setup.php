@@ -766,7 +766,7 @@ function pgsqlRunScriptFile($sFilename)
     }
     $procenv = NULL;
     if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
-        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), $_ENV;
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), $_ENV);
     }
 
     $ahGzipPipes = null;
