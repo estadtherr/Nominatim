@@ -154,7 +154,10 @@ CREATE TABLE placex (
   partition SMALLINT,
   indexed_status SMALLINT,
   LIKE place INCLUDING CONSTRAINTS,
-  wikipedia TEXT -- calculated wikipedia article name (language:title)
+  wikipedia TEXT, -- calculated wikipedia article name (language:title)
+  country_code varchar(2),
+  housenumber TEXT,
+  postcode TEXT
   ) {ts:search-data};
 SELECT AddGeometryColumn('placex', 'centroid', 4326, 'GEOMETRY', 2);
 CREATE UNIQUE INDEX idx_place_id ON placex USING BTREE (place_id) {ts:search-index};
