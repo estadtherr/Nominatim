@@ -199,7 +199,7 @@ if ($aCMDResult['import-data'] || $aCMDResult['all']) {
 
     $procenv = NULL;
     if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
-        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), getenv());
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), $_ENV);
     }
 
     $osm2pgsql .= ' -d '.$aDSNInfo['database'].' '.$aCMDResult['osm-file'];
@@ -553,7 +553,7 @@ if ($aCMDResult['index'] || $aCMDResult['all']) {
     }
     $procenv = NULL;
     if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
-        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), getenv());
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), $_ENV);
     }
 
     $status = runWithEnv($sBaseCmd.' -R 4', $procenv);
@@ -699,7 +699,7 @@ function pgsqlRunScriptFile($sFilename)
     }
     $procenv = NULL;
     if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
-        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), getenv());
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), $_ENV;
     }
 
     $ahGzipPipes = null;
@@ -759,7 +759,7 @@ function pgsqlRunScript($sScript, $bfatal = true)
     }
     $procenv = NULL;
     if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
-        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), getenv());
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), $_ENV);
     }
     if ($bfatal && !$aCMDResult['ignore-errors'])
         $sCMD .= ' -v ON_ERROR_STOP=1';
