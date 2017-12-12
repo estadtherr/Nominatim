@@ -196,11 +196,17 @@ if ($aCMDResult['import-data'] || $aCMDResult['all']) {
     if (isset($aDSNInfo['hostspec']) && $aDSNInfo['hostspec']) {
         $osm2pgsql .= ' -H ' . $aDSNInfo['hostspec'];
     }
+
+    $procenv = NULL;
+    if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), getenv());
+    }
+
     $osm2pgsql .= ' -d '.$aDSNInfo['database'].' '.$aCMDResult['osm-file'];
-    passthruCheckReturn($osm2pgsql);
+    runWithEnv($osm2pgsql, $procenv);
 
     $oDB =& getDB();
-    if (!$aCMDResult['ignore-errors'] && !chksql($oDB->getRow('select * from place limit 1'))) {
+    if (!$aCMDResult['ignore-errors'] && !chksql($oDB->getRow('SELECT * FROM place LIMIT 1'))) {
         fail('No Data');
     }
 }
