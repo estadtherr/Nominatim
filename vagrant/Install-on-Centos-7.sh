@@ -78,7 +78,7 @@
     sudo systemctl enable postgresql
 
 #
-# Next tune the postgresql configuration, which is located in 
+# Next tune the postgresql configuration, which is located in
 # `/var/lib/pgsql/data/postgresql.conf`. See section *Postgres Tuning* in
 # [the installation page](../admin/Installation.md#postgresql-tuning)
 # for the parameters to change.
@@ -133,7 +133,6 @@ sudo sed -i 's:#.*::' /etc/httpd/conf.d/nominatim.conf #DOCS:
 # following SELinux labeling should be done for Nominatim:
 
     sudo semanage fcontext -a -t httpd_sys_content_t "$USERHOME/Nominatim/(website|lib|settings)(/.*)?"
-    sudo semanage fcontext -a -t lib_t "$USERHOME/Nominatim/module/nominatim.so"
     sudo restorecon -R -v $USERHOME/Nominatim
 
 #

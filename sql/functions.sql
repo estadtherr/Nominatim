@@ -22,13 +22,45 @@ END;
 $$
 LANGUAGE plpgsql IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION transliteration(text) RETURNS text
-  AS '{modulepath}/nominatim.so', 'transliteration'
-LANGUAGE c IMMUTABLE STRICT;
+-- Substitute non-ASCII Unicode characters with ASCII replacements
+CREATE OR REPLACE FUNCTION transliteration(search_text TEXT) RETURNS TEXT
+AS $$
+DECLARE
+   working_string TEXT;
+   transform RECORD;
+BEGIN
+   working_string := search_text;
+   FOR transform IN SELECT * FROM utf_trans
+                    WHERE position(utf_char in working_string) <> 0
+                    LOOP
+      working_string := replace(working_string,
+                                transform.utf_char,
+                                transform.replacement);
+   END LOOP;
+   RETURN working_string;
+END;
+$$
+LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION gettokenstring(text) RETURNS text
-  AS '{modulepath}/nominatim.so', 'gettokenstring'
-LANGUAGE c IMMUTABLE STRICT;
+-- Replace common words with tokenized forms
+CREATE OR REPLACE FUNCTION gettokenstring(search_text TEXT) RETURNS TEXT
+AS $$
+DECLARE
+   working_string TEXT;
+   transform RECORD;
+BEGIN
+   working_string := search_text;
+   FOR transform IN SELECT * FROM token_replacement
+                    WHERE position(orig in working_string) <> 0
+                    LOOP
+      working_string := replace(working_string,
+                                transform.orig,
+                                transform.replacement);
+   END LOOP;
+   RETURN working_string;
+END;
+$$
+LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION make_standard_name(name TEXT) RETURNS TEXT
   AS $$
@@ -42,7 +74,7 @@ $$
 LANGUAGE 'plpgsql' IMMUTABLE;
 
 -- returns NULL if the word is too common
-CREATE OR REPLACE FUNCTION getorcreate_word_id(lookup_word TEXT) 
+CREATE OR REPLACE FUNCTION getorcreate_word_id(lookup_word TEXT)
   RETURNS INTEGER
   AS $$
 DECLARE
@@ -157,7 +189,7 @@ END;
 $$
 LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION getorcreate_name_id(lookup_word TEXT, src_word TEXT) 
+CREATE OR REPLACE FUNCTION getorcreate_name_id(lookup_word TEXT, src_word TEXT)
   RETURNS INTEGER
   AS $$
 DECLARE
@@ -180,7 +212,7 @@ END;
 $$
 LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION getorcreate_name_id(lookup_word TEXT) 
+CREATE OR REPLACE FUNCTION getorcreate_name_id(lookup_word TEXT)
   RETURNS INTEGER
   AS $$
 DECLARE
@@ -190,7 +222,7 @@ END;
 $$
 LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION get_word_id(lookup_word TEXT) 
+CREATE OR REPLACE FUNCTION get_word_id(lookup_word TEXT)
   RETURNS INTEGER
   AS $$
 DECLARE
@@ -204,7 +236,7 @@ END;
 $$
 LANGUAGE plpgsql IMMUTABLE;
 
-CREATE OR REPLACE FUNCTION get_name_id(lookup_word TEXT) 
+CREATE OR REPLACE FUNCTION get_name_id(lookup_word TEXT)
   RETURNS INTEGER
   AS $$
 DECLARE
@@ -246,7 +278,7 @@ BEGIN
     RETURN a;
   END IF;
   r := a;
-  FOR i IN 1..array_upper(b, 1) LOOP  
+  FOR i IN 1..array_upper(b, 1) LOOP
     IF NOT (ARRAY[b[i]] <@ r) THEN
       r := r || b[i];
     END IF;
@@ -549,7 +581,7 @@ BEGIN
 
 -- RAISE WARNING 'near osm fallback: %', ST_AsText(place_centre);
 
-  -- 
+  --
   FOR nearcountry IN select country_code from country_osm_grid where st_dwithin(geometry, place_centre, 0.5) order by st_distance(geometry, place_centre) asc, area asc limit 1
   LOOP
     RETURN nearcountry.country_code;
@@ -557,7 +589,7 @@ BEGIN
 
 -- RAISE WARNING 'near natural earth: %', ST_AsText(place_centre);
 
-  -- Natural earth data 
+  -- Natural earth data
   FOR nearcountry IN select country_code from country_naturalearthdata where st_dwithin(geometry, place_centre, 0.5) limit 1
   LOOP
     RETURN nearcountry.country_code;
@@ -630,7 +662,7 @@ CREATE OR REPLACE FUNCTION add_location(
     rank_address INTEGER,
     in_postcode TEXT,
     geometry GEOMETRY
-  ) 
+  )
   RETURNS BOOLEAN
   AS $$
 DECLARE
@@ -984,9 +1016,9 @@ BEGIN
   --    RAISE WARNING 'placex poly insert: % % % %',NEW.osm_type,NEW.osm_id,NEW.class,NEW.type;
 
         -- work around bug in postgis, this may have been fixed in 2.0.0 (see http://trac.osgeo.org/postgis/ticket/547)
-        update placex set indexed_status = 2 where (st_covers(NEW.geometry, placex.geometry) OR ST_Intersects(NEW.geometry, placex.geometry)) 
+        update placex set indexed_status = 2 where (st_covers(NEW.geometry, placex.geometry) OR ST_Intersects(NEW.geometry, placex.geometry))
          AND rank_search > NEW.rank_search and indexed_status = 0 and ST_geometrytype(placex.geometry) = 'ST_Point' and (rank_search < 28 or name is not null or (NEW.rank_search >= 16 and address ? 'place'));
-        update placex set indexed_status = 2 where (st_covers(NEW.geometry, placex.geometry) OR ST_Intersects(NEW.geometry, placex.geometry)) 
+        update placex set indexed_status = 2 where (st_covers(NEW.geometry, placex.geometry) OR ST_Intersects(NEW.geometry, placex.geometry))
          AND rank_search > NEW.rank_search and indexed_status = 0 and ST_geometrytype(placex.geometry) != 'ST_Point' and (rank_search < 28 or name is not null or (NEW.rank_search >= 16 and address ? 'place'));
       END IF;
     ELSE
@@ -1035,7 +1067,7 @@ BEGIN
   classtable := 'place_classtype_' || NEW.class || '_' || NEW.type;
   SELECT count(*)>0 FROM pg_tables WHERE tablename = classtable and schemaname = current_schema() INTO result;
   IF result THEN
-    EXECUTE 'INSERT INTO ' || classtable::regclass || ' (place_id, centroid) VALUES ($1,$2)' 
+    EXECUTE 'INSERT INTO ' || classtable::regclass || ' (place_id, centroid) VALUES ($1,$2)'
     USING NEW.place_id, ST_Centroid(NEW.geometry);
   END IF;
 
@@ -1045,7 +1077,7 @@ END;
 $$
 LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION osmline_update() RETURNS 
+CREATE OR REPLACE FUNCTION osmline_update() RETURNS
 TRIGGER
   AS $$
 DECLARE
@@ -1368,7 +1400,7 @@ BEGIN
 
   -- Adding ourselves to the list simplifies address calculations later
   INSERT INTO place_addressline (place_id, address_place_id, fromarea, isaddress, distance, cached_rank_address)
-    VALUES (NEW.place_id, NEW.place_id, true, true, 0, NEW.rank_address); 
+    VALUES (NEW.place_id, NEW.place_id, true, true, 0, NEW.rank_address);
 
   -- What level are we searching from
   search_maxrank := NEW.rank_search;
@@ -1488,7 +1520,7 @@ BEGIN
     IF NEW.parent_place_id IS NULL AND NEW.osm_type = 'N' THEN
 
       FOR location IN select p.place_id, p.osm_id, p.parent_place_id, p.rank_search, p.address from placex p, planet_osm_ways w
-         where p.osm_type = 'W' and p.rank_search >= 26 and p.geometry && NEW.geometry and w.id = p.osm_id and NEW.osm_id = any(w.nodes) 
+         where p.osm_type = 'W' and p.rank_search >= 26 and p.geometry && NEW.geometry and w.id = p.osm_id and NEW.osm_id = any(w.nodes)
       LOOP
         --DEBUG: RAISE WARNING 'Node is part of way % ', location.osm_id;
 
@@ -1529,7 +1561,7 @@ BEGIN
                 FOR i IN 1..array_upper(relation.members, 1) BY 2 LOOP
                   IF NEW.parent_place_id IS NULL AND relation.members[i+1] = 'street' THEN
   --RAISE WARNING 'node in way that is in a relation %',relation;
-                    SELECT place_id from placex where osm_type='W' and osm_id = substring(relation.members[i],2,200)::bigint 
+                    SELECT place_id from placex where osm_type='W' and osm_id = substring(relation.members[i],2,200)::bigint
                       and rank_search = 26 and name is not null INTO NEW.parent_place_id;
                   END IF;
                 END LOOP;
@@ -1612,7 +1644,7 @@ BEGIN
       FOR relMember IN select get_osm_rel_members(relation_members,ARRAY['label']) as member LOOP
         --DEBUG: RAISE WARNING 'Found label member %', relMember.member;
 
-        FOR linkedPlacex IN select * from placex where osm_type = upper(substring(relMember.member,1,1))::char(1) 
+        FOR linkedPlacex IN select * from placex where osm_type = upper(substring(relMember.member,1,1))::char(1)
           and osm_id = substring(relMember.member,2,10000)::bigint
           and class = 'place' order by rank_search desc limit 1 LOOP
 
@@ -1646,13 +1678,13 @@ BEGIN
         FOR relMember IN select get_osm_rel_members(relation_members,ARRAY['admin_center','admin_centre']) as member LOOP
           --DEBUG: RAISE WARNING 'Found admin_center member %', relMember.member;
 
-          FOR linkedPlacex IN select * from placex where osm_type = upper(substring(relMember.member,1,1))::char(1) 
+          FOR linkedPlacex IN select * from placex where osm_type = upper(substring(relMember.member,1,1))::char(1)
             and osm_id = substring(relMember.member,2,10000)::bigint
             and class = 'place' order by rank_search desc limit 1 LOOP
 
             -- For an admin centre we also want a name match - still not perfect, for example 'new york, new york'
             -- But that can be fixed by explicitly setting the label in the data
-            IF make_standard_name(NEW.name->'name') = make_standard_name(linkedPlacex.name->'name') 
+            IF make_standard_name(NEW.name->'name') = make_standard_name(linkedPlacex.name->'name')
               AND NEW.rank_address = linkedPlacex.rank_address THEN
 
               -- If we don't already have one use this as the centre point of the geometry
@@ -1728,7 +1760,7 @@ BEGIN
       place_centroid := NEW.centroid;
       -- Place might have had only a name tag before but has now received translations
       -- from the linked place. Make sure a name tag for the default language exists in
-      -- this case. 
+      -- this case.
       IF NEW.name is not null AND array_upper(akeys(NEW.name),1) > 1 THEN
         default_language := get_country_language_code(NEW.country_code);
         IF default_language IS NOT NULL THEN
@@ -1936,7 +1968,7 @@ BEGIN
         -- Add it to the list of search terms
         nameaddress_vector := array_merge(nameaddress_vector, location.keywords::integer[]);
         INSERT INTO place_addressline (place_id, address_place_id, fromarea, isaddress, distance, cached_rank_address)
-          VALUES (NEW.place_id, location.place_id, true, false, location.distance, location.rank_address); 
+          VALUES (NEW.place_id, location.place_id, true, false, location.distance, location.rank_address);
 
       END IF;
 
@@ -1945,7 +1977,7 @@ BEGIN
   END IF;
   --DEBUG: RAISE WARNING 'search terms for long ways added';
 
-  IF NEW.address is not null AND NEW.address ? 'postcode' 
+  IF NEW.address is not null AND NEW.address ? 'postcode'
      AND NEW.address->'postcode' not similar to '%(,|;)%' THEN
     NEW.postcode := upper(trim(NEW.address->'postcode'));
   END IF;
@@ -2001,7 +2033,7 @@ BEGIN
 
     -- mark everything linked to this place for re-indexing
     --DEBUG: RAISE WARNING 'placex_delete:03 % %',OLD.osm_type,OLD.osm_id;
-    UPDATE placex set indexed_status = 2 from place_addressline where address_place_id = OLD.place_id 
+    UPDATE placex set indexed_status = 2 from place_addressline where address_place_id = OLD.place_id
       and placex.place_id = place_addressline.place_id and indexed_status = 0 and place_addressline.isaddress;
 
     --DEBUG: RAISE WARNING 'placex_delete:04 % %',OLD.osm_type,OLD.osm_id;
@@ -2098,7 +2130,7 @@ BEGIN
   --DEBUG: RAISE WARNING '-----------------------------------------------------------------------------------';
   --DEBUG: RAISE WARNING 'place_insert: % % % % %',NEW.osm_type,NEW.osm_id,NEW.class,NEW.type,st_area(NEW.geometry);
   -- filter wrong tupels
-  IF ST_IsEmpty(NEW.geometry) OR NOT ST_IsValid(NEW.geometry) OR ST_X(ST_Centroid(NEW.geometry))::text in ('NaN','Infinity','-Infinity') OR ST_Y(ST_Centroid(NEW.geometry))::text in ('NaN','Infinity','-Infinity') THEN  
+  IF ST_IsEmpty(NEW.geometry) OR NOT ST_IsValid(NEW.geometry) OR ST_X(ST_Centroid(NEW.geometry))::text in ('NaN','Infinity','-Infinity') OR ST_Y(ST_Centroid(NEW.geometry))::text in ('NaN','Infinity','-Infinity') THEN
     INSERT INTO import_polygon_error (osm_type, osm_id, class, type, name, country_code, updated, errormessage, prevgeometry, newgeometry)
       VALUES (NEW.osm_type, NEW.osm_id, NEW.class, NEW.type, NEW.name, NEW.address->'country', now(), ST_IsValidReason(NEW.geometry), null, NEW.geometry);
 --    RAISE WARNING 'Invalid Geometry: % % % %',NEW.osm_type,NEW.osm_id,NEW.class,NEW.type;
@@ -2145,7 +2177,7 @@ BEGIN
        OR existing.geometry::text != NEW.geometry::text
        THEN
 
-      update place set 
+      update place set
         name = NEW.name,
         address = NEW.address,
         extratags = NEW.extratags,
@@ -2166,7 +2198,7 @@ BEGIN
             NEW.name = existing.name || NEW.name;
         END IF;
     END IF;
-      
+
     -- Have we already done this place?
     select * from place where osm_type = NEW.osm_type and osm_id = NEW.osm_id and class = NEW.class and type = NEW.type INTO existing;
 
@@ -2183,14 +2215,14 @@ BEGIN
     --DEBUG: RAISE WARNING 'Existing: %',existing.osm_id;
     --DEBUG: RAISE WARNING 'Existing PlaceX: %',existingplacex.place_id;
 
-    -- Log and discard 
-    IF existing.geometry is not null AND st_isvalid(existing.geometry) 
+    -- Log and discard
+    IF existing.geometry is not null AND st_isvalid(existing.geometry)
       AND st_area(existing.geometry) > 0.02
       AND ST_GeometryType(NEW.geometry) in ('ST_Polygon','ST_MultiPolygon')
       AND st_area(NEW.geometry) < st_area(existing.geometry)*0.5
       THEN
       INSERT INTO import_polygon_error (osm_type, osm_id, class, type, name, country_code, updated, errormessage, prevgeometry, newgeometry)
-        VALUES (NEW.osm_type, NEW.osm_id, NEW.class, NEW.type, NEW.name, NEW.address->'country', now(), 
+        VALUES (NEW.osm_type, NEW.osm_id, NEW.class, NEW.type, NEW.name, NEW.address->'country', now(),
         'Area reduced from '||st_area(existing.geometry)||' to '||st_area(NEW.geometry), existing.geometry, NEW.geometry);
       RETURN null;
     END IF;
@@ -2231,10 +2263,10 @@ BEGIN
     END IF;
 
     -- Special case for polygon shape changes because they tend to be large and we can be a bit clever about how we handle them
-    IF existing.geometry::text != NEW.geometry::text 
+    IF existing.geometry::text != NEW.geometry::text
        AND ST_GeometryType(existing.geometry) in ('ST_Polygon','ST_MultiPolygon')
-       AND ST_GeometryType(NEW.geometry) in ('ST_Polygon','ST_MultiPolygon') 
-       THEN 
+       AND ST_GeometryType(NEW.geometry) in ('ST_Polygon','ST_MultiPolygon')
+       THEN
 
       -- Get the version of the geometry actually used (in placex table)
       select geometry from placex where osm_type = NEW.osm_type and osm_id = NEW.osm_id and class = NEW.class and type = NEW.type into existinggeometry;
@@ -2243,12 +2275,12 @@ BEGIN
       IF st_area(NEW.geometry) < 0.000000001 AND st_area(existinggeometry) < 1 THEN
 
         -- re-index points that have moved in / out of the polygon, could be done as a single query but postgres gets the index usage wrong
-        update placex set indexed_status = 2 where indexed_status = 0 and 
+        update placex set indexed_status = 2 where indexed_status = 0 and
             (st_covers(NEW.geometry, placex.geometry) OR ST_Intersects(NEW.geometry, placex.geometry))
             AND NOT (st_covers(existinggeometry, placex.geometry) OR ST_Intersects(existinggeometry, placex.geometry))
             AND rank_search > existingplacex.rank_search AND (rank_search < 28 or name is not null);
 
-        update placex set indexed_status = 2 where indexed_status = 0 and 
+        update placex set indexed_status = 2 where indexed_status = 0 and
             (st_covers(existinggeometry, placex.geometry) OR ST_Intersects(existinggeometry, placex.geometry))
             AND NOT (st_covers(NEW.geometry, placex.geometry) OR ST_Intersects(NEW.geometry, placex.geometry))
             AND rank_search > existingplacex.rank_search AND (rank_search < 28 or name is not null);
@@ -2265,7 +2297,7 @@ BEGIN
        OR existing.geometry::text != NEW.geometry::text
        THEN
 
-      update place set 
+      update place set
         name = NEW.name,
         address = NEW.address,
         extratags = NEW.extratags,
@@ -2290,7 +2322,7 @@ BEGIN
           RETURN NULL;
       END IF;
 
-      update placex set 
+      update placex set
         name = NEW.name,
         address = NEW.address,
         parent_place_id = null,
@@ -2300,7 +2332,7 @@ BEGIN
         geometry = NEW.geometry
         where place_id = existingplacex.place_id;
 
-      -- if a node(=>house), which is part of a interpolation line, changes (e.g. the street attribute) => mark this line for reparenting 
+      -- if a node(=>house), which is part of a interpolation line, changes (e.g. the street attribute) => mark this line for reparenting
       -- (already here, because interpolation lines are reindexed before nodes, so in the second call it would be too late)
       IF NEW.osm_type='N' and NEW.class='place' and NEW.type='house' THEN
           -- Is this node part of an interpolation line? search for it in location_property_osmline and mark the interpolation line for reparenting
@@ -2390,13 +2422,13 @@ create type addressline as (
   class TEXT,
   type TEXT,
   admin_level INTEGER,
-  fromarea BOOLEAN,  
-  isaddress BOOLEAN,  
+  fromarea BOOLEAN,
+  isaddress BOOLEAN,
   rank_address INTEGER,
   distance FLOAT
 );
 
-CREATE OR REPLACE FUNCTION get_addressdata(in_place_id BIGINT, in_housenumber INTEGER) RETURNS setof addressline 
+CREATE OR REPLACE FUNCTION get_addressdata(in_place_id BIGINT, in_housenumber INTEGER) RETURNS setof addressline
   AS $$
 DECLARE
   for_place_id BIGINT;
@@ -2416,7 +2448,7 @@ DECLARE
   hadcountry BOOLEAN;
 BEGIN
   -- first query osmline (interpolation lines)
-  select parent_place_id, country_code, 30, postcode, null, 'place', 'house' from location_property_osmline 
+  select parent_place_id, country_code, 30, postcode, null, 'place', 'house' from location_property_osmline
     WHERE place_id = in_place_id AND in_housenumber>=startnumber AND in_housenumber <= endnumber
     INTO for_place_id,searchcountrycode, searchrankaddress, searchpostcode, searchhousename, searchclass, searchtype;
   IF for_place_id IS NOT NULL THEN
@@ -2426,7 +2458,7 @@ BEGIN
   --then query tiger data
   -- %NOTIGERDATA% IF 0 THEN
   IF for_place_id IS NULL THEN
-    select parent_place_id,'us', 30, postcode, null, 'place', 'house' from location_property_tiger 
+    select parent_place_id,'us', 30, postcode, null, 'place', 'house' from location_property_tiger
       WHERE place_id = in_place_id AND in_housenumber>=startnumber AND in_housenumber <= endnumber
       INTO for_place_id,searchcountrycode, searchrankaddress, searchpostcode, searchhousename, searchclass, searchtype;
     IF for_place_id IS NOT NULL THEN
@@ -2452,7 +2484,7 @@ BEGIN
   END IF;
 
   IF for_place_id IS NULL THEN
-    select parent_place_id, country_code, housenumber, rank_search, postcode, name, class, type from placex 
+    select parent_place_id, country_code, housenumber, rank_search, postcode, name, class, type from placex
       WHERE place_id = in_place_id and  rank_search > 27
       INTO for_place_id, searchcountrycode, searchhousenumber, searchrankaddress, searchpostcode, searchhousename, searchclass, searchtype;
   END IF;
@@ -2468,13 +2500,13 @@ BEGIN
 
   found := 1000;
   hadcountry := false;
-  FOR location IN 
+  FOR location IN
     select placex.place_id, osm_type, osm_id, name,
       class, type, admin_level, true as isaddress,
       CASE WHEN rank_address = 0 THEN 100 WHEN rank_address = 11 THEN 5 ELSE rank_address END as rank_address,
       0 as distance, country_code, postcode
       from placex
-      where place_id = for_place_id 
+      where place_id = for_place_id
   LOOP
 --RAISE WARNING '%',location;
     IF searchcountrycode IS NULL AND location.country_code IS NOT NULL THEN
@@ -2492,22 +2524,22 @@ BEGIN
         RETURN NEXT countrylocation;
       END IF;
     END IF;
-    countrylocation := ROW(location.place_id, location.osm_type, location.osm_id, location.name, location.class, 
+    countrylocation := ROW(location.place_id, location.osm_type, location.osm_id, location.name, location.class,
                            location.type, location.admin_level, true, location.isaddress, location.rank_address,
                            location.distance)::addressline;
     RETURN NEXT countrylocation;
     found := location.rank_address;
   END LOOP;
 
-  FOR location IN 
+  FOR location IN
     select placex.place_id, osm_type, osm_id, name,
       CASE WHEN extratags ? 'place' THEN 'place' ELSE class END as class,
       CASE WHEN extratags ? 'place' THEN extratags->'place' ELSE type END as type,
       admin_level, fromarea, isaddress,
       CASE WHEN address_place_id = for_place_id AND rank_address = 0 THEN 100 WHEN rank_address = 11 THEN 5 ELSE rank_address END as rank_address,
       distance,country_code,postcode
-      from place_addressline join placex on (address_place_id = placex.place_id) 
-      where place_addressline.place_id = for_place_id 
+      from place_addressline join placex on (address_place_id = placex.place_id)
+      where place_addressline.place_id = for_place_id
       and (cached_rank_address > 0 AND cached_rank_address < searchrankaddress)
       and address_place_id != for_place_id and linked_place_id is null
       and (placex.country_code IS NULL OR searchcountrycode IS NULL OR placex.country_code = searchcountrycode)
@@ -2530,8 +2562,8 @@ BEGIN
         RETURN NEXT countrylocation;
       END IF;
     END IF;
-    countrylocation := ROW(location.place_id, location.osm_type, location.osm_id, location.name, location.class, 
-                           location.type, location.admin_level, location.fromarea, location.isaddress, location.rank_address, 
+    countrylocation := ROW(location.place_id, location.osm_type, location.osm_id, location.name, location.class,
+                           location.type, location.admin_level, location.fromarea, location.isaddress, location.rank_address,
                            location.distance)::addressline;
     RETURN NEXT countrylocation;
     found := location.rank_address;
@@ -2611,7 +2643,7 @@ BEGIN
   ELSE
     RETURN 'Other: '||rank;
   END IF;
-  
+
 END;
 $$
 LANGUAGE plpgsql;
@@ -2657,12 +2689,12 @@ BEGIN
   ELSE
     RETURN 'Other: '||rank;
   END IF;
-  
+
 END;
 $$
 LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION aux_create_property(pointgeo GEOMETRY, in_housenumber TEXT, 
+CREATE OR REPLACE FUNCTION aux_create_property(pointgeo GEOMETRY, in_housenumber TEXT,
   in_street TEXT, in_isin TEXT, in_postcode TEXT, in_countrycode char(2)) RETURNS INTEGER
   AS $$
 DECLARE
@@ -2672,7 +2704,7 @@ DECLARE
   out_partition INTEGER;
   out_parent_place_id BIGINT;
   location RECORD;
-  address_street_word_id INTEGER;  
+  address_street_word_id INTEGER;
   out_postcode TEXT;
 
 BEGIN
@@ -2746,13 +2778,13 @@ $$
 LANGUAGE plpgsql;
 
 -- See: http://stackoverflow.com/questions/6410088/how-can-i-mimic-the-php-urldecode-function-in-postgresql
-CREATE OR REPLACE FUNCTION decode_url_part(p varchar) RETURNS varchar 
+CREATE OR REPLACE FUNCTION decode_url_part(p varchar) RETURNS varchar
   AS $$
 SELECT convert_from(CAST(E'\\x' || array_to_string(ARRAY(
     SELECT CASE WHEN length(r.m[1]) = 1 THEN encode(convert_to(r.m[1], 'SQL_ASCII'), 'hex') ELSE substring(r.m[1] from 2 for 2) END
     FROM regexp_matches($1, '%[0-9a-f][0-9a-f]|.', 'gi') AS r(m)
 ), '') AS bytea), 'UTF8');
-$$ 
+$$
 LANGUAGE SQL IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION catch_decode_url_part(p varchar) RETURNS varchar
@@ -2802,13 +2834,13 @@ BEGIN
       END IF;
 
       select wikipedia_article.language,wikipedia_article.title,wikipedia_article.importance
-        from wikipedia_article 
-        where language = wiki_article_language and 
+        from wikipedia_article
+        where language = wiki_article_language and
         (title = wiki_article_title OR title = catch_decode_url_part(wiki_article_title) OR title = replace(catch_decode_url_part(wiki_article_title),E'\\',''))
       UNION ALL
       select wikipedia_article.language,wikipedia_article.title,wikipedia_article.importance
         from wikipedia_redirect join wikipedia_article on (wikipedia_redirect.language = wikipedia_article.language and wikipedia_redirect.to_title = wikipedia_article.title)
-        where wikipedia_redirect.language = wiki_article_language and 
+        where wikipedia_redirect.language = wiki_article_language and
         (from_title = wiki_article_title OR from_title = catch_decode_url_part(wiki_article_title) OR from_title = replace(catch_decode_url_part(wiki_article_title),E'\\',''))
       order by importance desc limit 1 INTO result;
 
@@ -2823,7 +2855,7 @@ END;
 $$
 LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION quad_split_geometry(geometry GEOMETRY, maxarea FLOAT, maxdepth INTEGER) 
+CREATE OR REPLACE FUNCTION quad_split_geometry(geometry GEOMETRY, maxarea FLOAT, maxdepth INTEGER)
   RETURNS SETOF GEOMETRY
   AS $$
 DECLARE
@@ -2840,7 +2872,7 @@ DECLARE
   area FLOAT;
   remainingdepth INTEGER;
   added INTEGER;
-  
+
 BEGIN
 
 --  RAISE WARNING 'quad_split_geometry: maxarea=%, depth=%',maxarea,maxdepth;
@@ -2906,7 +2938,7 @@ END;
 $$
 LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION split_geometry(geometry GEOMETRY) 
+CREATE OR REPLACE FUNCTION split_geometry(geometry GEOMETRY)
   RETURNS SETOF GEOMETRY
   AS $$
 DECLARE
@@ -2955,9 +2987,9 @@ BEGIN
   IF placegeom IS NOT NULL AND ST_IsValid(placegeom) THEN
     IF ST_GeometryType(placegeom) in ('ST_Polygon','ST_MultiPolygon') THEN
       FOR geom IN select split_geometry(placegeom) FROM placex WHERE place_id = placeid LOOP
-        update placex set indexed_status = 2 where (st_covers(geom, placex.geometry) OR ST_Intersects(geom, placex.geometry)) 
+        update placex set indexed_status = 2 where (st_covers(geom, placex.geometry) OR ST_Intersects(geom, placex.geometry))
         AND rank_search > rank and indexed_status = 0 and ST_geometrytype(placex.geometry) = 'ST_Point' and (rank_search < 28 or name is not null or (rank >= 16 and address ? 'place'));
-        update placex set indexed_status = 2 where (st_covers(geom, placex.geometry) OR ST_Intersects(geom, placex.geometry)) 
+        update placex set indexed_status = 2 where (st_covers(geom, placex.geometry) OR ST_Intersects(geom, placex.geometry))
         AND rank_search > rank and indexed_status = 0 and ST_geometrytype(placex.geometry) != 'ST_Point' and (rank_search < 28 or name is not null or (rank >= 16 and address ? 'place'));
       END LOOP;
     ELSE

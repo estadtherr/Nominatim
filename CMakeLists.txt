@@ -144,7 +144,6 @@ add_test(NAME php
 
 #-----------------------------------------------------------------------------
 
-add_subdirectory(module)
 add_subdirectory(nominatim)
 add_subdirectory(docs)
 

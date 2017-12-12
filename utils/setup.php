@@ -5,6 +5,7 @@ require_once(dirname(dirname(__FILE__)).'/settings/settings.php');
 require_once(CONST_BasePath.'/lib/init-cmd.php');
 ini_set('memory_limit', '800M');
 
+# (long-opt, short-opt, ?, ?, num-arguments, num-arguments, type, help)
 $aCMDOptions
 = array(
    'Create and setup nominatim search system',
@@ -14,8 +15,6 @@ $aCMDOptions
 
    array('osm-file', '', 0, 1, 1, 1, 'realpath', 'File to import'),
    array('threads', '', 0, 1, 1, 1, 'int', 'Number of threads (where possible)'),
-   # (long-opt, short-opt, ?, ?, num-arguments, num-arguments, type, help)
-   array('module-path', '', 0, 1, 1, 1, 'realdir', 'Postgres C module path'),
 
    array('all', '', 0, 1, 0, 0, 'bool', 'Do the complete process'),
 
@@ -62,7 +61,6 @@ if ($aCMDResult['import-data'] || $aCMDResult['all']) {
     }
 }
 
-
 // This is a pretty hard core default - the number of processors in the box - 1
 $iInstances = isset($aCMDResult['threads'])?$aCMDResult['threads']:(getProcessorCount()-1);
 if ($iInstances < 1) {
@@ -79,12 +77,6 @@ if (isset($aCMDResult['osm2pgsql-cache'])) {
     $iCacheMemory = $aCMDResult['osm2pgsql-cache'];
 } else {
     $iCacheMemory = getCacheMemoryMB();
-}
-
-$modulePath = CONST_InstallPath . '/module';
-if (isset($aCMDResult['module-path'])) {
-   $modulePath = $aCMDResult['module-path'];
-   echo "module path: " . $modulePath . "\n";
 }
 
 $aDSNInfo = DB::parseDSN(CONST_Database_DSN);
@@ -168,6 +160,7 @@ if ($aCMDResult['setup-db'] || $aCMDResult['all']) {
     pgsqlRunScriptFile(CONST_BasePath.'/data/country_naturalearthdata.sql');
     pgsqlRunScriptFile(CONST_BasePath.'/data/country_osm_grid.sql.gz');
     pgsqlRunScriptFile(CONST_BasePath.'/data/gb_postcode_table.sql');
+    pgsqlRunScriptFile(CONST_BasePath.'/data/')
     if (file_exists(CONST_BasePath.'/data/gb_postcode_data.sql.gz')) {
         pgsqlRunScriptFile(CONST_BasePath.'/data/gb_postcode_data.sql.gz');
     } else {
@@ -229,9 +222,6 @@ if ($aCMDResult['import-data'] || $aCMDResult['all']) {
 if ($aCMDResult['create-functions'] || $aCMDResult['all']) {
     info('Create Functions');
     $bDidSomething = true;
-    if (!file_exists(CONST_InstallPath.'/module/nominatim.so')) {
-        fail('nominatim module not built');
-    }
     create_sql_functions($aCMDResult);
 }
 
@@ -429,7 +419,7 @@ if ($aCMDResult['load-data'] || $aCMDResult['all']) {
           // PGSQL_COPY_OUT, PGSQL_COPY_IN, PGSQL_BAD_RESPONSE,
           // PGSQL_NONFATAL_ERROR and PGSQL_FATAL_ERROR
           echo "Query result " . $i . " is: " . $resultStatus . "\n";
-          if ($resultStatus != PGSQL_COMMAND_OK || $resultStatus != PGSQL_TUPLES_OK) {
+          if ($resultStatus != PGSQL_COMMAND_OK && $resultStatus != PGSQL_TUPLES_OK) {
              $resultError = pg_result_error($pgresult);
              echo "-- error text " . $i . ": " . $resultError . "\n";
              $failed = true;
@@ -943,7 +933,6 @@ function create_sql_functions($aCMDResult)
 {
     global $modulePath;
     $sTemplate = file_get_contents(CONST_BasePath.'/sql/functions.sql');
-    $sTemplate = str_replace('{modulepath}', $modulePath, $sTemplate);
     if ($aCMDResult['enable-diff-updates']) {
         $sTemplate = str_replace('RETURN NEW; -- %DIFFUPDATES%', '--', $sTemplate);
     }

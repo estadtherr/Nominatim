@@ -12,7 +12,7 @@ For updates you need to download the change files for each country
 once per day and apply them **separately** using
 
     ./utils/update.php --import-diff <filename> --index
-    
+
 See [this issue](https://github.com/openstreetmap/Nominatim/issues/60#issuecomment-18679446)
 for a script that runs the updates using osmosis.
 
@@ -49,7 +49,7 @@ in your PHP configuration (php.ini file). By default this setting may look like 
 
     open_basedir = /srv/http/:/home/:/tmp/:/usr/share/pear/
 
-Either add reported directories to the list or disable this setting temporarily by 
+Either add reported directories to the list or disable this setting temporarily by
 dding ";" at the beginning of the line. Don't forget to enable this setting again
 once you are done with the PHP command line operations.
 
@@ -60,7 +60,7 @@ once you are done with the PHP command line operations.
 You should set the default time zone as instructed in the warning in
 your `php.ini` file. Find the entry about timezone and set it to
 something like this:
-  
+
     ; Defines the default timezone used by the date functions
     ; http://php.net/date.timezone
     date.timezone = 'America/Denver'
@@ -71,19 +71,10 @@ Or
 echo "date.timezone = 'America/Denver'" > /etc/php.d/timezone.ini
 ```
 
-### When running the import I get a version mismatch:
-    `COPY_END for place failed: ERROR: incompatible library "/opt/Nominatim/module/nominatim.so": version mismatch`
-
-pg_config seems to use bad includes sometimes when multiple versions
-of PostgreSQL are available in the system. Make sure you remove the
-server development libraries (`postgresql-server-dev-9.1` on Ubuntu)
-and recompile (`cmake .. && make`).
-
-
 ### I see the error: `function transliteration(text) does not exist`
 
 Reinstall the nominatim functions with `setup.php --create--functions`
-and check for any errors, e.g. a missing `nominatim.so` file.
+and check for any errors.
 
 
 ### The website shows: `Could not get word tokens`
@@ -97,7 +88,7 @@ to get the full error message.
 On CentOS v7 the PostgreSQL server is started with `systemd`.
 Check if `/usr/lib/systemd/system/httpd.service` contains a line `PrivateTmp=true`.
 If so then Apache cannot see the `/tmp/.s.PGSQL.5432` file. It's a good security feature,
-so use the [preferred solution](../appendix/Install-on-Centos-7/#adding-selinux-security-settings).
+so use the [[#PostgreSQL_UNIX_Socket_Location_on_CentOS|preferred solution]]
 
 However, you can solve this the quick and dirty way by commenting out that line and then run
 
