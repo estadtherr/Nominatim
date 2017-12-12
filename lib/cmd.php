@@ -166,7 +166,7 @@ function runSQLScript($sScript, $bfatal = true, $bVerbose = false, $bIgnoreError
     }
     $procenv = NULL;
     if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
-        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), getenv());
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), $_ENV;
     }
     if (!$bVerbose) {
         $sCMD .= ' -q';

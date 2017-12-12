@@ -217,7 +217,7 @@ if ($aCMDResult['import-data'] || $aCMDResult['all']) {
 
     $procenv = NULL;
     if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
-        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), getenv());
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), $_ENV);
     }
 
     $osm2pgsql .= ' -d '.$aDSNInfo['database'].' '.$aCMDResult['osm-file'];
@@ -604,7 +604,7 @@ if ($aCMDResult['index'] || $aCMDResult['all']) {
     }
     $procenv = NULL;
     if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
-        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), getenv());
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), $_ENV);
     }
 
     info('Index ranks 0 - 4');
@@ -766,7 +766,7 @@ function pgsqlRunScriptFile($sFilename)
     }
     $procenv = NULL;
     if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
-        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), getenv());
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), $_ENV;
     }
 
     $ahGzipPipes = null;
