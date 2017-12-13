@@ -907,22 +907,15 @@ function passthruCheckReturn($cmd)
 function runWithEnv($cmd, $env)
 {
    $fds = array(0 => array('pipe', 'r'),
-                1 => array('pipe', 'w'),
-                2 => array('pipe', 'w'));
+                1 => STDOUT,
+                2 => STDERR);
    $pipes = NULL;
    $proc = @proc_open($cmd, $fds, $pipes, NULL, $env);
-   if (!is_resource($proc)) fail('unable to run command:' . $cmd);
+   if (!is_resource($proc)) {
+      fail('unable to run command:' . $cmd);
+   }
 
    fclose($pipes[0]); // no stdin
-   while (!feof($pipes[1])) {
-      echo fread($pipes[1], 4096);
-   }
-   while (!feof($pipes[2])) {
-      echo fread($pipes[2], 4096);
-   }
-
-   fclose($pipes[1]);
-   fclose($pipes[2]);
 
    $stat = proc_close($proc);
    return $stat;
