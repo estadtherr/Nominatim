@@ -6,6 +6,8 @@ CREATE TABLE token_replacement (
    orig text,
    replacement text);
 
+TRUNCATE TABLE token_replacement;
+
 -- replace " andador " with " andad "
 INSERT INTO token_replacement (orig, replacement) VALUES (' andador ', ' andad ');
 -- replace " market " with " mkt "
