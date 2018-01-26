@@ -794,7 +794,6 @@ function pgsqlRunScriptFile($sFilename)
     $hProcess = proc_open($sCMD, $aDescriptors, $ahPipes, NULL, $procenv);
     if (!is_resource($hProcess)) fail('unable to start pgsql');
 
-
     // TODO: error checking
     while (!feof($ahPipes[1])) {
         echo fread($ahPipes[1], 4096);
