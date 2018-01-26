@@ -8,7 +8,7 @@ CREATE TABLE token_replacement (
 
 TRUNCATE TABLE token_replacement;
 
-COPY {0} (orig, replacement) FROM STDIN;
+COPY token_replacement (orig, replacement) FROM STDIN;
  andador 	 andad
  market 	 mkt
  balneario 	 balnr
