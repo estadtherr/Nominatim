@@ -15,7 +15,7 @@ SET default_tablespace = '';
 SET default_with_oids = false;
 
 --
--- Name: word_frequencies; Type: TABLE; Schema: public; Owner: -; Tablespace: 
+-- Name: word_frequencies; Type: TABLE; Schema: public; Owner: -; Tablespace:
 --
 
 CREATE TABLE word_frequencies (
@@ -23,6 +23,7 @@ CREATE TABLE word_frequencies (
     count bigint
 );
 
+TRUNCATE TABLE word_frequencies;
 
 --
 -- Data for Name: word_frequencies; Type: TABLE DATA; Schema: public; Owner: -
