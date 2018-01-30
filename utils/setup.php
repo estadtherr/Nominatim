@@ -15,6 +15,7 @@ $aCMDOptions
 
    array('osm-file', '', 0, 1, 1, 1, 'realpath', 'File to import'),
    array('threads', '', 0, 1, 1, 1, 'int', 'Number of threads (where possible)'),
+   array('module-path', '', 0, 1, 1, 1, 'realdir', 'Directory on Postgres server containing Nominatim module'),
 
    array('all', '', 0, 1, 0, 0, 'bool', 'Do the complete process'),
 
@@ -77,6 +78,12 @@ if (isset($aCMDResult['osm2pgsql-cache'])) {
     $iCacheMemory = $aCMDResult['osm2pgsql-cache'];
 } else {
     $iCacheMemory = getCacheMemoryMB();
+}
+
+$modulePath = CONST_InstallPath . '/module';
+if (isset($aCMDResult['module-path'])) {
+   $modulePath = $aCMDResult['module-path'];
+   echo "module path: " . $modulePath . "\n";
 }
 
 $aDSNInfo = DB::parseDSN(CONST_Database_DSN);
@@ -897,6 +904,7 @@ function create_sql_functions($aCMDResult)
 {
     global $modulePath;
     $sTemplate = file_get_contents(CONST_BasePath.'/sql/functions.sql');
+    $sTemplate = str_replace('{modulepath}', $modulePath, $sTemplate);
     if ($aCMDResult['enable-diff-updates']) {
         $sTemplate = str_replace('RETURN NEW; -- %DIFFUPDATES%', '--', $sTemplate);
     }
