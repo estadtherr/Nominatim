@@ -22,45 +22,13 @@ END;
 $$
 LANGUAGE plpgsql IMMUTABLE;
 
--- Substitute non-ASCII Unicode characters with ASCII replacements
-CREATE OR REPLACE FUNCTION transliteration(search_text TEXT) RETURNS TEXT
-AS $$
-DECLARE
-   working_string TEXT;
-   transform RECORD;
-BEGIN
-   working_string := search_text;
-   FOR transform IN SELECT * FROM utf_trans
-                    WHERE position(utf_char in working_string) <> 0
-                    LOOP
-      working_string := replace(working_string,
-                                transform.utf_char,
-                                transform.replacement);
-   END LOOP;
-   RETURN working_string;
-END;
-$$
-LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION transliteration(text) RETURNS text
+  AS '{modulepath}/nominatim.so', 'transliteration'
+LANGUAGE c IMMUTABLE STRICT;
 
--- Replace common words with tokenized forms
-CREATE OR REPLACE FUNCTION gettokenstring(search_text TEXT) RETURNS TEXT
-AS $$
-DECLARE
-   working_string TEXT;
-   transform RECORD;
-BEGIN
-   working_string := search_text;
-   FOR transform IN SELECT * FROM token_replacement
-                    WHERE position(orig in working_string) <> 0
-                    LOOP
-      working_string := replace(working_string,
-                                transform.orig,
-                                transform.replacement);
-   END LOOP;
-   RETURN working_string;
-END;
-$$
-LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION gettokenstring(text) RETURNS text
+  AS '{modulepath}/nominatim.so', 'gettokenstring'
+LANGUAGE c IMMUTABLE STRICT;
 
 CREATE OR REPLACE FUNCTION make_standard_name(name TEXT) RETURNS TEXT
   AS $$
