@@ -68,10 +68,6 @@ if ($iInstances < 1) {
     $iInstances = 1;
     echo "WARNING: resetting threads to $iInstances\n";
 }
-if ($iInstances > getProcessorCount()) {
-    $iInstances = getProcessorCount();
-    echo "WARNING: resetting threads to $iInstances\n";
-}
 
 // Assume we can steal all the cache memory in the box (unless told otherwise)
 if (isset($aCMDResult['osm2pgsql-cache'])) {
