@@ -149,8 +149,6 @@ if ($aCMDResult['setup-db'] || $aCMDResult['all']) {
     pgsqlRunScriptFile(CONST_BasePath.'/data/country_naturalearthdata.sql');
     pgsqlRunScriptFile(CONST_BasePath.'/data/country_osm_grid.sql.gz');
     pgsqlRunScriptFile(CONST_BasePath.'/data/gb_postcode_table.sql');
-    pgsqlRunScriptFile(CONST_BasePath.'/data/token_replacement.sql');
-    pgsqlRunScriptFile(CONST_BasePath.'/data/utf_trans.sql');
     if (file_exists(CONST_BasePath.'/data/gb_postcode_data.sql.gz')) {
         pgsqlRunScriptFile(CONST_BasePath.'/data/gb_postcode_data.sql.gz');
     } else {
