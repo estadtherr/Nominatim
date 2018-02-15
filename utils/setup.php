@@ -791,7 +791,7 @@ function pgsqlRunPartitionScript($sTemplate)
     global $aCMDResult;
     $oDB =& getDB();
 
-    $sSQL = 'select distinct partition from country_name';
+    $sSQL = 'SELECT DISTINCT partition FROM country_name';
     $aPartitions = chksql($oDB->getCol($sSQL));
     if (!$aCMDResult['no-partitions']) $aPartitions[] = 0;
 
@@ -841,22 +841,14 @@ function pgsqlRunDropAndRestore($sDumpFile)
     if (!isset($aDSNInfo['port']) || !$aDSNInfo['port']) $aDSNInfo['port'] = 5432;
     $sCMD = 'pg_restore -p '.$aDSNInfo['port'].' -d '.$aDSNInfo['database'].' -Fc --clean '.$sDumpFile;
 
-    $aDescriptors = array(
-                     0 => array('pipe', 'r'),
-                     1 => array('pipe', 'w'),
-                     2 => array('file', '/dev/null', 'a')
-                    );
-    $ahPipes = null;
-    $hProcess = proc_open($sCMD, $aDescriptors, $ahPipes);
+    $fds = array(0 => array('pipe', 'r'),
+                 1 => STDOUT,
+                 2 => STDERR);
+    $pipes = NULL;
+    $hProcess = @proc_open($sCMD, $fds, $pipes);
     if (!is_resource($hProcess)) fail('unable to start pg_restore');
 
-    fclose($ahPipes[0]);
-
-    // TODO: error checking
-    while (!feof($ahPipes[1])) {
-        echo fread($ahPipes[1], 4096);
-    }
-    fclose($ahPipes[1]);
+    fclose($pipes[0]);
 
     $iReturn = proc_close($hProcess);
 }
