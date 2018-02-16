@@ -840,17 +840,18 @@ function pgsqlRunDropAndRestore($sDumpFile)
     $aDSNInfo = DB::parseDSN(CONST_Database_DSN);
     if (!isset($aDSNInfo['port']) || !$aDSNInfo['port']) $aDSNInfo['port'] = 5432;
     $sCMD = 'pg_restore -p '.$aDSNInfo['port'].' -d '.$aDSNInfo['database'].' -Fc --clean '.$sDumpFile;
+    if (isset($aDSNInfo['hostspec']) && $aDSNInfo['hostspec']) {
+        $sCMD .= ' -h ' . $aDSNInfo['hostspec'];
+    }
+    if (isset($aDSNInfo['username']) && $aDSNInfo['username']) {
+        $sCMD .= ' -U ' . $aDSNInfo['username'];
+    }
+    $procenv = NULL;
+    if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), $_ENV);
+    }
 
-    $fds = array(0 => array('pipe', 'r'),
-                 1 => STDOUT,
-                 2 => STDERR);
-    $pipes = NULL;
-    $hProcess = @proc_open($sCMD, $fds, $pipes);
-    if (!is_resource($hProcess)) fail('unable to start pg_restore');
-
-    fclose($pipes[0]);
-
-    $iReturn = proc_close($hProcess);
+    $iReturn = runWithEnv($sCMD, $procenv);
 }
 
 function passthruCheckReturn($cmd)
