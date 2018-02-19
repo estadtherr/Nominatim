@@ -56,6 +56,17 @@ if ($iCacheMemory + 500 > getTotalMemoryMB()) {
     echo "WARNING: resetting cache memory to $iCacheMemory\n";
 }
 $sOsm2pgsqlCmd = CONST_Osm2pgsql_Binary.' -klas --number-processes 1 -C '.$iCacheMemory.' -O gazetteer -d '.$aDSNInfo['database'].' -P '.$aDSNInfo['port'];
+if (isset($aDSNInfo['username']) && $aDSNInfo['username']) {
+    $sOsm2pgsqlCmd .= ' -U ' . $aDSNInfo['username'];
+}
+if (isset($aDSNInfo['hostspec']) && $aDSNInfo['hostspec']) {
+    $sOsm2pgsqlCmd .= ' -H ' . $aDSNInfo['hostspec'];
+}
+$procenv = NULL;
+if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
+    $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), $_ENV);
+}
+
 if (!is_null(CONST_Osm2pgsql_Flatnode_File)) {
     $sOsm2pgsqlCmd .= ' --flat-nodes '.CONST_Osm2pgsql_Flatnode_File;
 }
@@ -121,7 +132,7 @@ if (isset($aResult['import-diff']) || isset($aResult['import-file'])) {
     // Import the file
     $sCMD = $sOsm2pgsqlCmd.' '.$sNextFile;
     echo $sCMD."\n";
-    exec($sCMD, $sJunk, $iErrorLevel);
+    $iErrorLevel = runWithEnv($sCMD, $procenv);
 
     if ($iErrorLevel) {
         fail("Error from osm2pgsql, $iErrorLevel\n");
@@ -173,7 +184,7 @@ if ($bHaveDiff) {
     // import generated change file
     $sCMD = $sOsm2pgsqlCmd.' '.$sTemporaryFile;
     echo $sCMD."\n";
-    exec($sCMD, $sJunk, $iErrorLevel);
+    $iErrorLevel = runWithEnv($sCMD, $procenv);
     if ($iErrorLevel) {
         fail("osm2pgsql exited with error level $iErrorLevel\n");
     }
@@ -186,65 +197,65 @@ if ($aResult['deduplicate']) {
         fail('ERROR: deduplicate is only currently supported in postgresql 9.3');
     }
 
-    $sSQL = 'select partition from country_name order by country_code';
+    $sSQL = 'SELECT partition FROM country_name ORDER BY country_code';
     $aPartitions = chksql($oDB->getCol($sSQL));
     $aPartitions[] = 0;
 
     // we don't care about empty search_name_* partitions, they can't contain mentions of duplicates
     foreach ($aPartitions as $i => $sPartition) {
-        $sSQL = 'select count(*) from search_name_'.$sPartition;
+        $sSQL = "SELECT COUNT(*) FROM search_name_".$sPartition;
         $nEntries = chksql($oDB->getOne($sSQL));
         if ($nEntries == 0) {
             unset($aPartitions[$i]);
         }
     }
 
-    $sSQL = "select word_token,count(*) from word where substr(word_token, 1, 1) = ' '";
-    $sSQL .= ' and class is null and type is null and country_code is null';
-    $sSQL .= ' group by word_token having count(*) > 1 order by word_token';
+    $sSQL = "SELECT word_token,count(*) FROM word WHERE substr(word_token, 1, 1) = ' '";
+    $sSQL .= " AND class IS NULL AND type IS NULL AND country_code IS NULL";
+    $sSQL .= " GROUP BY word_token HAVING COUNT(*) > 1 ORDER BY word_token";
     $aDuplicateTokens = chksql($oDB->getAll($sSQL));
     foreach ($aDuplicateTokens as $aToken) {
         if (trim($aToken['word_token']) == '' || trim($aToken['word_token']) == '-') continue;
-        echo 'Deduping '.$aToken['word_token']."\n";
-        $sSQL = 'select word_id,';
-        $sSQL .= ' (select count(*) from search_name where nameaddress_vector @> ARRAY[word_id]) as num';
-        $sSQL .= " from word where word_token = '".$aToken['word_token'];
-        $sSQL .= "' and class is null and type is null and country_code is null order by num desc";
+        echo "Deduping ".$aToken['word_token']."\n";
+        $sSQL = "SELECT word_id,";
+        $sSQL .= " (SELECT count(*) FROM search_name WHERE nameaddress_vector @> ARRAY[word_id]) AS num";
+        $sSQL .= " FROM word WHERE word_token = '".$aToken['word_token'];
+        $sSQL .= "' AND class IS NULL AND type IS NULL AND country_code IS NULL ORDER BY num DESC";
         $aTokenSet = chksql($oDB->getAll($sSQL));
 
         $aKeep = array_shift($aTokenSet);
         $iKeepID = $aKeep['word_id'];
 
         foreach ($aTokenSet as $aRemove) {
-            $sSQL = 'update search_name set';
-            $sSQL .= ' name_vector = array_replace(name_vector,'.$aRemove['word_id'].','.$iKeepID.'),';
-            $sSQL .= ' nameaddress_vector = array_replace(nameaddress_vector,'.$aRemove['word_id'].','.$iKeepID.')';
-            $sSQL .= ' where name_vector @> ARRAY['.$aRemove['word_id'].']';
+            $sSQL = "UPDATE search_name SET";
+            $sSQL .= " name_vector = array_replace(name_vector,".$aRemove['word_id'].",".$iKeepID."),";
+            $sSQL .= " nameaddress_vector = array_replace(nameaddress_vector,".$aRemove['word_id'].",".$iKeepID.")";
+            $sSQL .= " WHERE name_vector @> ARRAY[".$aRemove['word_id']."]";
             chksql($oDB->query($sSQL));
 
-            $sSQL = 'update search_name set';
-            $sSQL .= ' nameaddress_vector = array_replace(nameaddress_vector,'.$aRemove['word_id'].','.$iKeepID.')';
-            $sSQL .= ' where nameaddress_vector @> ARRAY['.$aRemove['word_id'].']';
+            $sSQL = "UPDATE search_name SET";
+            $sSQL .= " nameaddress_vector = array_replace(nameaddress_vector,".$aRemove['word_id'].",".$iKeepID.")";
+            $sSQL .= " WHERE nameaddress_vector @> ARRAY[".$aRemove['word_id']."]";
             chksql($oDB->query($sSQL));
 
-            $sSQL = 'update location_area_country set';
-            $sSQL .= ' keywords = array_replace(keywords,'.$aRemove['word_id'].','.$iKeepID.')';
-            $sSQL .= ' where keywords @> ARRAY['.$aRemove['word_id'].']';
+            $sSQL = "UPDATE location_area_country SET";
+            $sSQL .= " keywords = array_replace(keywords,".$aRemove['word_id'].",".$iKeepID.")";
+            $sSQL .= " WHERE keywords @> ARRAY[".$aRemove['word_id']."]";
             chksql($oDB->query($sSQL));
 
             foreach ($aPartitions as $sPartition) {
-                $sSQL = 'update search_name_'.$sPartition.' set';
-                $sSQL .= ' name_vector = array_replace(name_vector,'.$aRemove['word_id'].','.$iKeepID.')';
-                $sSQL .= ' where name_vector @> ARRAY['.$aRemove['word_id'].']';
+                $sSQL = "UPDATE search_name_".$sPartition." SET";
+                $sSQL .= " name_vector = array_replace(name_vector,".$aRemove['word_id'].",".$iKeepID.")";
+                $sSQL .= " WHERE name_vector @> ARRAY[".$aRemove['word_id']."]";
                 chksql($oDB->query($sSQL));
 
-                $sSQL = 'update location_area_country set';
-                $sSQL .= ' keywords = array_replace(keywords,'.$aRemove['word_id'].','.$iKeepID.')';
-                $sSQL .= ' where keywords @> ARRAY['.$aRemove['word_id'].']';
+                $sSQL = "UPDATE location_area_country SET";
+                $sSQL .= " keywords = array_replace(keywords,".$aRemove['word_id'].",".$iKeepID.")";
+                $sSQL .= " WHERE keywords @> ARRAY[".$aRemove['word_id']."]";
                 chksql($oDB->query($sSQL));
             }
 
-            $sSQL = 'delete from word where word_id = '.$aRemove['word_id'];
+            $sSQL = "DELETE FROM word WHERE word_id = ".$aRemove['word_id'];
             chksql($oDB->query($sSQL));
         }
     }
@@ -270,6 +281,12 @@ if ($aResult['import-osmosis'] || $aResult['import-osmosis-all']) {
     $sCMDDownload = CONST_Pyosmium_Binary.' --server '.CONST_Replication_Url.' -o '.$sImportFile.' -s '.CONST_Replication_Max_Diff_size;
     $sCMDImport = $sOsm2pgsqlCmd.' '.$sImportFile;
     $sCMDIndex = CONST_InstallPath.'/nominatim/nominatim -i -d '.$aDSNInfo['database'].' -P '.$aDSNInfo['port'].' -t '.$aResult['index-instances'];
+    if (isset($aDSNInfo['hostspec']) && $aDSNInfo['hostspec']) {
+        $sCMDIndex .= ' -H ' . $aDSNInfo['hostspec'];
+    }
+    if (isset($aDSNInfo['username']) && $aDSNInfo['username']) {
+        $sCMDIndex .= ' -U ' . $aDSNInfo['username'];
+    }
 
     while (true) {
         $fStartTime = time();
@@ -335,7 +352,7 @@ if ($aResult['import-osmosis'] || $aResult['import-osmosis-all']) {
             $fCMDStartTime = time();
             echo $sCMDImport."\n";
             unset($sJunk);
-            exec($sCMDImport, $sJunk, $iErrorLevel);
+            $iErrorLevel = runWithEnv($sCMDImport, $procenv);
             if ($iErrorLevel) {
                 echo "Error executing osm2pgsql: $iErrorLevel\n";
                 exit($iErrorLevel);
@@ -364,7 +381,7 @@ if ($aResult['import-osmosis'] || $aResult['import-osmosis-all']) {
             $fCMDStartTime = time();
 
             echo "$sThisIndexCmd\n";
-            exec($sThisIndexCmd, $sJunk, $iErrorLevel);
+            $iErrorLevel = runWithEnv($sThisIndexCmd, $procenv);
             if ($iErrorLevel) {
                 echo "Error: $iErrorLevel\n";
                 exit($iErrorLevel);
@@ -379,7 +396,7 @@ if ($aResult['import-osmosis'] || $aResult['import-osmosis-all']) {
             $oDB->query($sSQL);
             echo date('Y-m-d H:i:s')." Completed index step for $sBatchEnd in ".round((time()-$fCMDStartTime)/60, 2)." minutes\n";
 
-            $sSQL = 'update import_status set indexed = true';
+            $sSQL = "UPDATE import_status SET indexed = true";
             $oDB->query($sSQL);
         }
 
@@ -387,4 +404,21 @@ if ($aResult['import-osmosis'] || $aResult['import-osmosis-all']) {
         echo date('Y-m-d H:i:s')." Completed all for $sBatchEnd in ".round($fDuration/60, 2)." minutes\n";
         if (!$aResult['import-osmosis-all']) exit(0);
     }
+}
+
+function runWithEnv($cmd, $env)
+{
+   $fds = array(0 => array('pipe', 'r'),
+                1 => STDOUT,
+                2 => STDERR);
+   $pipes = NULL;
+   $proc = @proc_open($cmd, $fds, $pipes, NULL, $env);
+   if (!is_resource($proc)) {
+      fail('unable to run command:' . $cmd);
+   }
+
+   fclose($pipes[0]); // no stdin
+
+   $stat = proc_close($proc);
+   return $stat;
 }
