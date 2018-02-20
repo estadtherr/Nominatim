@@ -15,7 +15,7 @@ $aCMDOptions
    array('verbose', 'v', 0, 1, 0, 0, 'bool', 'Verbose output'),
 
    array('init-updates', '', 0, 1, 0, 0, 'bool', 'Set up database for updating'),
-   array('update-functions', '', 0, 1, 0, 0, 'bool', 'Update trigger functions to support differential updates')
+   array('update-functions', '', 0, 1, 0, 0, 'bool', 'Update trigger functions to support differential updates'),
    array('import-osmosis', '', 0, 1, 0, 0, 'bool', 'Import updates once'),
    array('import-osmosis-all', '', 0, 1, 0, 0, 'bool', 'Import updates forever'),
    array('no-npi', '', 0, 1, 0, 0, 'bool', '(obsolate)'),
