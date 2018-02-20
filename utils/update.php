@@ -5,6 +5,8 @@ require_once(dirname(dirname(__FILE__)).'/settings/settings.php');
 require_once(CONST_BasePath.'/lib/init-cmd.php');
 ini_set('memory_limit', '800M');
 
+# (long-opt, short-opt, min-occurs, max-occurs, num-arguments, num-arguments, type, help)
+
 $aCMDOptions
 = array(
    'Import / update / index osm data',
@@ -14,6 +16,7 @@ $aCMDOptions
 
    array('init-updates', '', 0, 1, 0, 0, 'bool', 'Set up database for updating'),
    array('check-for-updates', '', 0, 1, 0, 0, 'bool', 'Check if new updates are available'),
+   array('update-functions', '', 0, 1, 0, 0, 'bool', 'Update trigger functions to support differential updates')
    array('import-osmosis', '', 0, 1, 0, 0, 'bool', 'Import updates once'),
    array('import-osmosis-all', '', 0, 1, 0, 0, 'bool', 'Import updates forever'),
    array('no-index', '', 0, 1, 0, 0, 'bool', 'Do not index the new data'),
@@ -79,11 +82,13 @@ if ($aResult['init-updates']) {
         echo "Does the URL point to a directory containing OSM update data?\n\n";
         fail('replication URL not reachable.');
     }
-    $sSetup = CONST_InstallPath.'/utils/setup.php';
-    $iRet = -1;
-    passthru($sSetup.' --create-functions --enable-diff-updates', $iRet);
-    if ($iRet != 0) {
-        fail('Error running setup script');
+    if ($aResult['update-functions']) {
+       $sSetup = CONST_InstallPath.'/utils/setup.php';
+       $iRet = -1;
+       passthru($argv[0].' '.$sSetup.' --create-functions --enable-diff-updates', $iRet);
+       if ($iRet != 0) {
+           fail('Error running setup script');
+       }
     }
 
     $sDatabaseDate = getDatabaseDate($oDB);
