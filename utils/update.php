@@ -5,6 +5,8 @@ require_once(dirname(dirname(__FILE__)).'/settings/settings.php');
 require_once(CONST_BasePath.'/lib/init-cmd.php');
 ini_set('memory_limit', '800M');
 
+# (long-opt, short-opt, min-occurs, max-occurs, num-arguments, num-arguments, type, help)
+
 $aCMDOptions
 = array(
    "Import / update / index osm data",
@@ -13,6 +15,7 @@ $aCMDOptions
    array('verbose', 'v', 0, 1, 0, 0, 'bool', 'Verbose output'),
 
    array('init-updates', '', 0, 1, 0, 0, 'bool', 'Set up database for updating'),
+   array('update-functions', '', 0, 1, 0, 0, 'bool', 'Update trigger functions to support differential updates')
    array('import-osmosis', '', 0, 1, 0, 0, 'bool', 'Import updates once'),
    array('import-osmosis-all', '', 0, 1, 0, 0, 'bool', 'Import updates forever'),
    array('no-npi', '', 0, 1, 0, 0, 'bool', '(obsolate)'),
@@ -70,11 +73,13 @@ if (!is_null(CONST_Osm2pgsql_Flatnode_File)) {
 }
 
 if ($aResult['init-updates']) {
-    $sSetup = CONST_InstallPath.'/utils/setup.php';
-    $iRet = -1;
-    passthru($sSetup.' --create-functions --enable-diff-updates', $iRet);
-    if ($iRet != 0) {
-        fail('Error running setup script');
+    if ($aResult['update-functions']) {
+       $sSetup = CONST_InstallPath.'/utils/setup.php';
+       $iRet = -1;
+       passthru($argv[0].' '.$sSetup.' --create-functions --enable-diff-updates', $iRet);
+       if ($iRet != 0) {
+           fail('Error running setup script');
+       }
     }
 
     $sDatabaseDate = getDatabaseDate($oDB);
