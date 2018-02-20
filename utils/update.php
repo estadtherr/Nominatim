@@ -16,7 +16,7 @@ $aCMDOptions
 
    array('init-updates', '', 0, 1, 0, 0, 'bool', 'Set up database for updating'),
    array('check-for-updates', '', 0, 1, 0, 0, 'bool', 'Check if new updates are available'),
-   array('update-functions', '', 0, 1, 0, 0, 'bool', 'Update trigger functions to support differential updates')
+   array('update-functions', '', 0, 1, 0, 0, 'bool', 'Update trigger functions to support differential updates'),
    array('import-osmosis', '', 0, 1, 0, 0, 'bool', 'Import updates once'),
    array('import-osmosis-all', '', 0, 1, 0, 0, 'bool', 'Import updates forever'),
    array('no-index', '', 0, 1, 0, 0, 'bool', 'Do not index the new data'),
