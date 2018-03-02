@@ -5,7 +5,8 @@ require_once(dirname(dirname(__FILE__)).'/settings/settings.php');
 require_once(CONST_BasePath.'/lib/init-cmd.php');
 ini_set('memory_limit', '800M');
 
-# (long-opt, short-opt, ?, ?, num-arguments, num-arguments, type, help)
+# (long-opt, short-opt, min-occurs, max-occurs, num-arguments, num-arguments, type, help)
+
 $aCMDOptions
 = array(
    "Create and setup nominatim search system",
@@ -66,10 +67,6 @@ if ($aCMDResult['import-data'] || $aCMDResult['all']) {
 $iInstances = isset($aCMDResult['threads'])?$aCMDResult['threads']:(getProcessorCount()-1);
 if ($iInstances < 1) {
     $iInstances = 1;
-    echo "WARNING: resetting threads to $iInstances\n";
-}
-if ($iInstances > getProcessorCount()) {
-    $iInstances = getProcessorCount();
     echo "WARNING: resetting threads to $iInstances\n";
 }
 
@@ -793,7 +790,7 @@ function pgsqlRunPartitionScript($sTemplate)
     global $aCMDResult;
     $oDB =& getDB();
 
-    $sSQL = 'select distinct partition from country_name';
+    $sSQL = 'SELECT DISTINCT partition FROM country_name';
     $aPartitions = chksql($oDB->getCol($sSQL));
     if (!$aCMDResult['no-partitions']) $aPartitions[] = 0;
 
@@ -842,25 +839,18 @@ function pgsqlRunDropAndRestore($sDumpFile)
     $aDSNInfo = DB::parseDSN(CONST_Database_DSN);
     if (!isset($aDSNInfo['port']) || !$aDSNInfo['port']) $aDSNInfo['port'] = 5432;
     $sCMD = 'pg_restore -p '.$aDSNInfo['port'].' -d '.$aDSNInfo['database'].' -Fc --clean '.$sDumpFile;
-
-    $aDescriptors = array(
-                     0 => array('pipe', 'r'),
-                     1 => array('pipe', 'w'),
-                     2 => array('file', '/dev/null', 'a')
-                    );
-    $ahPipes = null;
-    $hProcess = proc_open($sCMD, $aDescriptors, $ahPipes);
-    if (!is_resource($hProcess)) fail('unable to start pg_restore');
-
-    fclose($ahPipes[0]);
-
-    // TODO: error checking
-    while (!feof($ahPipes[1])) {
-        echo fread($ahPipes[1], 4096);
+    if (isset($aDSNInfo['hostspec']) && $aDSNInfo['hostspec']) {
+        $sCMD .= ' -h ' . $aDSNInfo['hostspec'];
     }
-    fclose($ahPipes[1]);
+    if (isset($aDSNInfo['username']) && $aDSNInfo['username']) {
+        $sCMD .= ' -U ' . $aDSNInfo['username'];
+    }
+    $procenv = NULL;
+    if (isset($aDSNInfo['password']) && $aDSNInfo['password']) {
+        $procenv = array_merge(array('PGPASSWORD' => $aDSNInfo['password']), $_ENV);
+    }
 
-    $iReturn = proc_close($hProcess);
+    $iReturn = runWithEnv($sCMD, $procenv);
 }
 
 function passthruCheckReturn($cmd)
