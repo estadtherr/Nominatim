@@ -71,10 +71,18 @@ Or
 echo "date.timezone = 'America/Denver'" > /etc/php.d/timezone.ini
 ```
 
+### When running the import I get a version mismatch:
+    `COPY_END for place failed: ERROR: incompatible library "/opt/Nominatim/module/nominatim.so": version mismatch`
+
+pg_config seems to use bad includes sometimes when multiple versions
+of PostgreSQL are available in the system. Make sure you remove the
+server development libraries (`postgresql-server-dev-9.1` on Ubuntu)
+and recompile (`cmake .. && make`).
+
 ### I see the error: `function transliteration(text) does not exist`
 
 Reinstall the nominatim functions with `setup.php --create--functions`
-and check for any errors.
+and check for any errors, e.g. a missing `nominatim.so` file.
 
 
 ### The website shows: `Could not get word tokens`

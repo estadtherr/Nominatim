@@ -133,6 +133,7 @@ sudo sed -i 's:#.*::' /etc/httpd/conf.d/nominatim.conf #DOCS:
 # following SELinux labeling should be done for Nominatim:
 
     sudo semanage fcontext -a -t httpd_sys_content_t "$USERHOME/Nominatim/(website|lib|settings)(/.*)?"
+    sudo semanage fcontext -a -t lib_t "$USERHOME/Nominatim/module/nominatim.so"
     sudo restorecon -R -v $USERHOME/Nominatim
 
 #
