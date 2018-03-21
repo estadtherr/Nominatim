@@ -534,6 +534,7 @@ if ($aCMDResult['import-tiger-data']) {
 if ($aCMDResult['calculate-postcodes'] || $aCMDResult['all']) {
     info('Calculate Postcodes');
     $bDidSomething = true;
+    echo "Calculating postcodes\n";
     $oDB =& getDB();
     if (!pg_query($oDB->connection, 'TRUNCATE location_postcode')) {
         fail(pg_last_error($oDB->connection));
