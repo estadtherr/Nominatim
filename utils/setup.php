@@ -517,6 +517,7 @@ if ($aCMDResult['import-tiger-data']) {
 
 if ($aCMDResult['calculate-postcodes'] || $aCMDResult['all']) {
     $bDidSomething = true;
+    echo "Calculating postcodes\n";
     $oDB =& getDB();
     if (!pg_query($oDB->connection, 'DELETE from placex where osm_type=\'P\'')) fail(pg_last_error($oDB->connection));
     $sSQL = "INSERT INTO placex (osm_type,osm_id,class,type,address,country_code,geometry) ";
