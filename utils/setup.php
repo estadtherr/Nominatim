@@ -144,7 +144,7 @@ if ($aCMDResult['setup-db'] || $aCMDResult['all']) {
     // Try accessing the C module, so we know early if something is wrong
     // and can simply error out.
     $sSQL = "CREATE FUNCTION nominatim_test_import_func(text) RETURNS text AS '";
-    $sSQL .= CONST_InstallPath."/module/nominatim.so', 'transliteration' LANGUAGE c IMMUTABLE STRICT";
+    $sSQL .= $modulePath."/nominatim.so', 'transliteration' LANGUAGE c IMMUTABLE STRICT";
     $sSQL .= ';DROP FUNCTION nominatim_test_import_func(text);';
     $oResult = $oDB->query($sSQL);
 
